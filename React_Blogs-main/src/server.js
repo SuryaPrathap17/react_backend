@@ -1,64 +1,81 @@
-import express from "express";
-import mysql from "mysql2";
-import cors from "cors";
+import express from 'express';
+import { Sequelize, DataTypes } from 'sequelize';
+import cors from 'cors';
+
 
 const app = express();
 app.use(express.json());
 app.use(cors());
 
-// MySQL Database Connection
-const db = mysql.createConnection({
-  host: "localhost",
-  user: "root", // Change if you have a different MySQL user
-  password: "password", // Add your MySQL password
-  database: "blogdb",
+const sequelize = new Sequelize('blogdb', 'root', 'password', {
+  host: 'localhost',
+  dialect: 'mysql',
+  logging: false, 
 });
 
-db.connect((err) => {
-  if (err) {
-    console.error("Database Connection Failed:", err);
-  } else {
-    console.log("✅ Connected to MySQL Database");
+
+const Blog = sequelize.define('Blog', {
+  title: {
+    type: DataTypes.STRING,
+    allowNull: false,
+  },
+  image: {
+    type: DataTypes.STRING,
+    allowNull: true,
+  },
+  content: {
+    type: DataTypes.TEXT,
+    allowNull: false,
+  },
+}, {
+  tableName: 'blogs', 
+  timestamps: true,   
+  createdAt: 'created_at', 
+  updatedAt: 'updated_at',
+});
+
+
+sequelize.sync()
+  .then(() => console.log('✅ Connected to MySQL Database and synced models'))
+  .catch(err => console.error('Database connection failed:', err));
+
+
+app.get('/api/blogs', async (req, res) => {
+  try {
+    const blogs = await Blog.findAll();
+    res.json(blogs);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 
-// Route to Get All Blogs
-app.get("/api/blogs", (req, res) => {
-  db.query("SELECT * FROM blogs", (err, result) => {
-    if (err) {
-      return res.status(500).json({ error: err.message });
-    }
-    res.json(result);
-  });
-});
 
-// Route to Add a Blog
-app.post("/api/blogs", (req, res) => {
+app.post('/api/blogs', async (req, res) => {
   const { title, image, content } = req.body;
-  db.query(
-    "INSERT INTO blogs (title, image, content) VALUES (?, ?, ?)",
-    [title, image, content],
-    (err, result) => {
-      if (err) {
-        return res.status(500).json({ error: err.message });
-      }
-      res.json({ id: result.insertId, title, image, content });
-    }
-  );
+  try {
+    const newBlog = await Blog.create({ title, image, content });
+    res.json(newBlog);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
-// Route to Delete a Blog
-app.delete("/api/blogs/:id", (req, res) => {
+
+app.delete('/api/blogs/:id', async (req, res) => {
   const { id } = req.params;
-  db.query("DELETE FROM blogs WHERE id = ?", [id], (err) => {
-    if (err) {
-      return res.status(500).json({ error: err.message });
+  try {
+    const blog = await Blog.findByPk(id);
+    if (!blog) {
+      return res.status(404).json({ error: 'Blog not found' });
     }
-    res.json({ message: "Blog deleted successfully" });
-  });
+    await blog.destroy();
+    res.json({ message: 'Blog deleted successfully' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
-// Start Server
+
 const PORT = 5000;
 app.listen(PORT, () => {
   console.log(`🚀 Server running on http://localhost:${PORT}`);
